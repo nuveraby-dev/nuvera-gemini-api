@@ -1,4 +1,4 @@
-# app.py (Финальный рабочий код для AI-помощника сайта на Vercel)
+# app.py (Финальная рабочая версия для Vercel с усиленным CORS)
 
 import os
 from flask import Flask, request, jsonify
@@ -13,25 +13,29 @@ logging.basicConfig(level=logging.INFO)
 
 # --- Настройка Flask ---
 app = Flask(__name__)
-# Разрешаем запросы со всех внешних доменов
-CORS(app)
+
+# !!! УСИЛЕННЫЙ CORS: Разрешаем запросы POST/GET только с конкретного пути /api/*
+# "origins": "*" разрешает запросы с ЛЮБОГО домена (чтобы избежать проблем Tilda)
+CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
+
+# --- Настройки Gemini ---
+MODEL_NAME = "gemini-2.5-flash"
 
 # --- Инициализация Gemini API ---
 client = None
-MODEL_NAME = "gemini-2.5-flash"
-# Ключ будет автоматически считан из переменной окружения Vercel
 try:
-    # Клиент автоматически ищет GEMINI_API_KEY в переменных окружения
-    # Убедитесь, что на Vercel ключ называется GEMINI_API_KEY
+    # Клиент автоматически ищет GEMINI_API_KEY в переменных окружения Vercel
     client = genai.Client()
     logging.info("Gemini client initialized successfully.")
 except Exception as e:
     logging.error(f"!!! CRITICAL ERROR: Gemini client failed to initialize: {e}")
-    # Если инициализация не удалась, клиент останется None
 
-# --- Маршрут для ТЕСТИРОВАНИЯ ---
+# --- Маршрут для ПРОВЕРКИ СТАТУСА ---
 @app.route('/', methods=['GET'])
 def home():
+    """
+    Возвращает статус работоспособности API и клиента Gemini.
+    """
     if client:
         return "Nuvera AI API is running and Gemini client is ready!", 200
     else:
@@ -40,6 +44,9 @@ def home():
 # --- Маршрут для ТЕКСТОВОГО ЧАТА ---
 @app.route('/api/ai_chat', methods=['POST'])
 def ai_chat():
+    """
+    Принимает JSON-запрос с сообщением и историей чата, возвращает ответ Gemini.
+    """
     if not client:
         return jsonify({
             "response": "Ошибка API: Gemini client не инициализирован. Проверьте ваш API-ключ на Vercel.",
@@ -49,28 +56,29 @@ def ai_chat():
     try:
         data = request.get_json()
         user_message = data.get('message', '')
-        # История чата в формате Tilda/JS
         history_data = data.get('history', [])
 
-        # 1. Форматирование истории чата для Gemini
+        if not user_message:
+            return jsonify({"response": "Пожалуйста, отправьте текстовое сообщение.", "manager_alert": False}), 400
+
+        # --- 1. Форматирование истории чата для Gemini ---
         history = []
         for item in history_data:
-            # Проверяем, что необходимые поля существуют
             if 'role' in item and item.get('parts') and item['parts'][0].get('text'):
                 history.append(Content(
                     role=item['role'],
                     parts=[Part.from_text(item['parts'][0]['text'])]
                 ))
-
-        # 2. Системная инструкция
-        # Вы можете добавить сюда вашу JSON-таблицу с ценами, как планировали
+        
+        # --- 2. Системная инструкция (Промпт) ---
         system_instruction = (
-            "Ты – AI-консультант компании Nuvera, специализирующейся на широкоформатной печати и производстве рекламных конструкций. "
+            "Ты — ведущий технолог-полиграфист и автоматизированная система консультаций студии nuvera. "
+            "Твой тон: деловой, профессиональный. "
             "Твоя задача — помочь клиенту с расчетом стоимости печати, выбором материала и проверкой требований к макетам. "
-            "Отвечай вежливо, кратко и только по существу, связанному с печатью."
+            "ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА: Отвечай вежливо, кратко и только по существу, связанному с печатью."
         )
 
-        # 3. Создание чата (для сохранения контекста)
+        # --- 3. Создание чата (для сохранения контекста) ---
         chat = client.chats.create(
             model=MODEL_NAME,
             history=history,
@@ -79,7 +87,7 @@ def ai_chat():
             )
         )
 
-        # 4. Отправка нового сообщения и получение ответа
+        # --- 4. Отправка нового сообщения ---
         ai_response_result = chat.send_message(user_message)
         ai_response = ai_response_result.text
 
@@ -88,7 +96,7 @@ def ai_chat():
     except APIError as api_e:
         logging.error(f"Ошибка Gemini API (во время запроса): {api_e}")
         return jsonify({
-            "response": "Произошла ошибка API (Gemini). Проверьте ключ API или лимиты запросов.",
+            "response": "Произошла ошибка API (Gemini). Пожалуйста, попробуйте позже.",
             "manager_alert": True
         }), 500
 
