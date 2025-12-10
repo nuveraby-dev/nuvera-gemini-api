@@ -1,8 +1,8 @@
-# app.py (Финальная стандартная версия для Vercel с CORS)
+# app.py (Финальный Production-код для nuvera-gemini-api.vercel.app)
 
 import os
 from flask import Flask, request, jsonify
-from flask_cors import CORS # Импортируем CORS
+from flask_cors import CORS 
 from google import genai
 from google.genai.errors import APIError
 from google.genai.types import Content, Part, GenerateContentConfig
@@ -17,17 +17,17 @@ app = Flask(__name__)
 # !!! FIX CORS: Простая инициализация для надежной обработки OPTIONS
 CORS(app) 
 
-# --- Настройки Gemini V2 ---
+# --- Настройки Gemini ---
 MODEL_NAME = "gemini-2.5-flash"
 
 # --- Инициализация Gemini API ---
 client = None
 try:
-    # КРИТИЧЕСКИ ВАЖНО: Клиент автоматически ищет ключ в переменной GEMINI_API_KEY
+    # Ожидается, что ключ GEMINI_API_KEY установлен в переменных окружения Vercel
     client = genai.Client()
     logging.info("Gemini client initialized successfully.")
 except Exception as e:
-    # Если ключ не найден, функция не падает, а мы логируем ошибку
+    # Если ключ не найден/недействителен, функция не падает, а мы логируем ошибку
     logging.error(f"!!! CRITICAL ERROR: Gemini client failed to initialize: {e}")
 
 # --- Маршрут для ПРОВЕРКИ СТАТУСА ---
@@ -107,4 +107,3 @@ def ai_chat():
             "response": "Произошла внутренняя ошибка сервера. Пожалуйста, обратитесь к менеджеру.",
             "manager_alert": True
         }), 500
-
