@@ -60,7 +60,7 @@ def ai_chat():
             if 'role' in item and item.get('parts') and item['parts'][0].get('text'):
                 history.append(Content(
                     role=item['role'],
-                    # ИСПРАВЛЕНИЕ: Используем Part.from_text() как отдельный аргумент
+                    # ИСПРАВЛЕНИЕ: Part.from_text() принимает только один аргумент (строку текста)
                     parts=[Part.from_text(item['parts'][0]['text'])] 
                 ))
         
