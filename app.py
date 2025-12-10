@@ -17,7 +17,7 @@ app = Flask(__name__)
 # !!! FIX CORS: Простая инициализация для надежной обработки OPTIONS
 CORS(app) 
 
-# --- Настройки Gemini ---
+# --- Настройки Gemini V2 ---
 MODEL_NAME = "gemini-2.5-flash"
 
 # --- Инициализация Gemini API ---
@@ -107,3 +107,4 @@ def ai_chat():
             "response": "Произошла внутренняя ошибка сервера. Пожалуйста, обратитесь к менеджеру.",
             "manager_alert": True
         }), 500
+
