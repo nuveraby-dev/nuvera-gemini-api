@@ -1,4 +1,4 @@
-# app.py (Финальный Production-код с исправленным порядком)
+# app.py (Финальный Production-код - Полный и исправленный)
 
 import os
 from flask import Flask, request, jsonify
@@ -11,8 +11,7 @@ import logging
 # --- Настройка логирования ---
 logging.basicConfig(level=logging.INFO)
 
-# --- Настройка Flask ---
-# !!! ЭТОТ БЛОК КРИТИЧЕСКИ ВАЖЕН !!!
+# --- Настройка Flask (КРИТИЧНО: app должно быть определено до @app.route) ---
 app = Flask(__name__)
 
 # FIX CORS
@@ -39,7 +38,6 @@ def home():
         return "Nuvera AI API is running, but Gemini client failed to initialize (Check GEMINI_API_KEY on Vercel).", 503
 
 # --- Маршрут для ТЕКСТОВОГО ЧАТА ---
-# ЭТА ФУНКЦИЯ ТЕПЕРЬ СОДЕРЖИТ ИСПРАВЛЕНИЕ JSON-ПАРСИНГА И Part.from_text
 @app.route('/api/ai_chat', methods=['POST'])
 def ai_chat():
     if not client:
@@ -65,12 +63,13 @@ def ai_chat():
         if not user_message:
             return jsonify({"response": "Пожалуйста, отправьте текстовое сообщение.", "manager_alert": False}), 400
 
-        # --- 1. ФОРМАТИРОВАНИЕ ИСТОРИИ ЧАТА ---
+        # --- 1. ФОРМАТИРОВАНИЕ ИСТОРИИ ЧАТА (ИСПРАВЛЕНО) ---
         history = []
         for item in history_data:
             if 'role' in item and item.get('parts') and item['parts'][0].get('text'):
                 history.append(Content(
                     role=item['role'],
+                    # ИСПРАВЛЕНО: Part.from_text() принимает только один аргумент (строку текста)
                     parts=[Part.from_text(item['parts'][0]['text'])] 
                 ))
         
