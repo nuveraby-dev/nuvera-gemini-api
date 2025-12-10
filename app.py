@@ -1,4 +1,4 @@
-# app.py (Финальная рабочая версия для Vercel с исправленным CORS)
+# app.py (Финальная рабочая версия для Vercel с упрощенным CORS)
 
 import os
 from flask import Flask, request, jsonify
@@ -14,9 +14,9 @@ logging.basicConfig(level=logging.INFO)
 # --- Настройка Flask ---
 app = Flask(__name__)
 
-# !!! УСИЛЕННЫЙ CORS: Разрешаем запросы POST/GET/OPTIONS с любого домена
-# Это критически важно для работы между Tilda и Vercel.
-CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
+# !!! ФИНАЛЬНЫЙ FIX CORS: Инициализируем CORS для всего приложения.
+# Это гарантирует, что запрос OPTIONS будет обработан до того, как он попадет в маршрут.
+CORS(app) 
 
 # --- Настройки Gemini ---
 MODEL_NAME = "gemini-2.5-flash"
@@ -24,7 +24,6 @@ MODEL_NAME = "gemini-2.5-flash"
 # --- Инициализация Gemini API ---
 client = None
 try:
-    # Клиент автоматически ищет GEMINI_API_KEY в переменных окружения Vercel
     client = genai.Client()
     logging.info("Gemini client initialized successfully.")
 except Exception as e:
@@ -33,25 +32,22 @@ except Exception as e:
 # --- Маршрут для ПРОВЕРКИ СТАТУСА ---
 @app.route('/', methods=['GET'])
 def home():
-    """
-    Возвращает статус работоспособности API и клиента Gemini.
-    """
     if client:
         return "Nuvera AI API is running and Gemini client is ready!", 200
     else:
         return "Nuvera AI API is running, but Gemini client failed to initialize. Check API Key.", 503
 
 # --- Маршрут для ТЕКСТОВОГО ЧАТА ---
+# Мы не указываем methods=['POST', 'OPTIONS'], так как CORS(app) должен это делать автоматически
 @app.route('/api/ai_chat', methods=['POST'])
 def ai_chat():
-    """
-    Принимает JSON-запрос с сообщением и историей чата, возвращает ответ Gemini.
-    """
     if not client:
         return jsonify({
             "response": "Ошибка API: Gemini client не инициализирован. Проверьте ваш API-ключ на Vercel.",
             "manager_alert": True
         }), 503
+
+    # ... (Остальная логика chat) ...
 
     try:
         data = request.get_json()
@@ -61,7 +57,6 @@ def ai_chat():
         if not user_message:
             return jsonify({"response": "Пожалуйста, отправьте текстовое сообщение.", "manager_alert": False}), 400
 
-        # --- 1. Форматирование истории чата для Gemini ---
         history = []
         for item in history_data:
             if 'role' in item and item.get('parts') and item['parts'][0].get('text'):
@@ -70,7 +65,6 @@ def ai_chat():
                     parts=[Part.from_text(item['parts'][0]['text'])]
                 ))
         
-        # --- 2. Системная инструкция (Промпт) ---
         system_instruction = (
             "Ты — ведущий технолог-полиграфист и автоматизированная система консультаций студии nuvera. "
             "Твой тон: деловой, профессиональный. "
@@ -78,7 +72,6 @@ def ai_chat():
             "ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА: Отвечай вежливо, кратко и только по существу, связанному с печатью."
         )
 
-        # --- 3. Создание чата (для сохранения контекста) ---
         chat = client.chats.create(
             model=MODEL_NAME,
             history=history,
@@ -87,7 +80,6 @@ def ai_chat():
             )
         )
 
-        # --- 4. Отправка нового сообщения ---
         ai_response_result = chat.send_message(user_message)
         ai_response = ai_response_result.text
 
