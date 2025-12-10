@@ -1,9 +1,45 @@
-# app.py (Финальный Production-код с безопасным чтением JSON)
+# app.py (Финальный Production-код с исправленным порядком)
 
-# ... (импорты и инициализация остаются без изменений)
-# ...
+import os
+from flask import Flask, request, jsonify
+from flask_cors import CORS 
+from google import genai
+from google.genai.errors import APIError
+from google.genai.types import Content, Part, GenerateContentConfig
+import logging
+
+# --- Настройка логирования ---
+logging.basicConfig(level=logging.INFO)
+
+# --- Настройка Flask ---
+# !!! ЭТОТ БЛОК КРИТИЧЕСКИ ВАЖЕН !!!
+app = Flask(__name__)
+
+# FIX CORS
+CORS(app) 
+
+# --- Настройки Gemini ---
+MODEL_NAME = "gemini-2.5-flash"
+
+# --- Инициализация Gemini API ---
+client = None
+try:
+    # Ожидается GEMINI_API_KEY
+    client = genai.Client()
+    logging.info("Gemini client initialized successfully.")
+except Exception as e:
+    logging.error(f"!!! CRITICAL ERROR: Gemini client failed to initialize: {e}")
+
+# --- Маршрут для ПРОВЕРКИ СТАТУСА ---
+@app.route('/', methods=['GET'])
+def home():
+    if client:
+        return "Nuvera AI API is running and Gemini client is ready!", 200
+    else:
+        return "Nuvera AI API is running, but Gemini client failed to initialize (Check GEMINI_API_KEY on Vercel).", 503
 
 # --- Маршрут для ТЕКСТОВОГО ЧАТА ---
+# ЭТА ФУНКЦИЯ ТЕПЕРЬ СОДЕРЖИТ ИСПРАВЛЕНИЕ JSON-ПАРСИНГА И Part.from_text
 @app.route('/api/ai_chat', methods=['POST'])
 def ai_chat():
     if not client:
@@ -13,9 +49,7 @@ def ai_chat():
         }), 503
 
     try:
-        # --- КРИТИЧЕСКОЕ ИЗМЕНЕНИЕ: БЕЗОПАСНОЕ ЧТЕНИЕ JSON ---
-        # Получаем JSON-данные. Silent=True предотвращает сбой функции, 
-        # возвращая None, если данные невалидны или отсутствуют.
+        # --- БЕЗОПАСНОЕ ЧТЕНИЕ JSON ---
         data = request.get_json(silent=True) 
 
         if not data:
@@ -27,12 +61,11 @@ def ai_chat():
 
         user_message = data.get('message', '')
         history_data = data.get('history', [])
-        # --- КОНЕЦ КРИТИЧЕСКОГО ИЗМЕНЕНИЯ ---
 
         if not user_message:
             return jsonify({"response": "Пожалуйста, отправьте текстовое сообщение.", "manager_alert": False}), 400
 
-        # --- 1. ФОРМАТИРОВАНИЕ ИСТОРИИ ЧАТА (Оставляем ИСПРАВЛЕННЫЙ код) ---
+        # --- 1. ФОРМАТИРОВАНИЕ ИСТОРИИ ЧАТА ---
         history = []
         for item in history_data:
             if 'role' in item and item.get('parts') and item['parts'][0].get('text'):
@@ -41,8 +74,7 @@ def ai_chat():
                     parts=[Part.from_text(item['parts'][0]['text'])] 
                 ))
         
-        # ... (Остальная логика чата остается без изменений) ...
-
+        # --- 2. Системная инструкция (Промпт) ---
         system_instruction = (
             "Ты — ведущий технолог-полиграфист и автоматизированная система консультаций студии nuvera. "
             "Твой тон: деловой, профессиональный. "
@@ -50,6 +82,7 @@ def ai_chat():
             "ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА: Отвечай вежливо, кратко и только по существу, связанному с печатью."
         )
 
+        # --- 3. Создание чата (для сохранения контекста) ---
         chat = client.chats.create(
             model=MODEL_NAME,
             history=history,
@@ -58,6 +91,7 @@ def ai_chat():
             )
         )
 
+        # --- 4. Отправка нового сообщения ---
         ai_response_result = chat.send_message(user_message)
         ai_response = ai_response_result.text
 
