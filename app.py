@@ -2,7 +2,7 @@
 
 import os
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask_cors import CORS # Убедитесь, что этот импорт есть!
 from google import genai
 from google.genai.errors import APIError
 from google.genai.types import Content, Part, GenerateContentConfig
@@ -14,8 +14,8 @@ logging.basicConfig(level=logging.INFO)
 # --- Настройка Flask ---
 app = Flask(__name__)
 
-# !!! ФИНАЛЬНЫЙ FIX CORS: Инициализируем CORS для всего приложения.
-# Это гарантирует, что запрос OPTIONS будет обработан до того, как он попадет в маршрут.
+# !!! ФИНАЛЬНЫЙ FIX CORS: Инициализируем CORS для всего приложения без ограничений.
+# Это гарантирует, что запрос OPTIONS будет обработан корректно (ответ 200).
 CORS(app) 
 
 # --- Настройки Gemini ---
@@ -24,6 +24,7 @@ MODEL_NAME = "gemini-2.5-flash"
 # --- Инициализация Gemini API ---
 client = None
 try:
+    # Клиент автоматически ищет GEMINI_API_KEY в переменных окружения Vercel
     client = genai.Client()
     logging.info("Gemini client initialized successfully.")
 except Exception as e:
@@ -32,22 +33,25 @@ except Exception as e:
 # --- Маршрут для ПРОВЕРКИ СТАТУСА ---
 @app.route('/', methods=['GET'])
 def home():
+    """
+    Возвращает статус работоспособности API и клиента Gemini.
+    """
     if client:
         return "Nuvera AI API is running and Gemini client is ready!", 200
     else:
         return "Nuvera AI API is running, but Gemini client failed to initialize. Check API Key.", 503
 
 # --- Маршрут для ТЕКСТОВОГО ЧАТА ---
-# Мы не указываем methods=['POST', 'OPTIONS'], так как CORS(app) должен это делать автоматически
 @app.route('/api/ai_chat', methods=['POST'])
 def ai_chat():
+    """
+    Принимает JSON-запрос с сообщением и историей чата, возвращает ответ Gemini.
+    """
     if not client:
         return jsonify({
             "response": "Ошибка API: Gemini client не инициализирован. Проверьте ваш API-ключ на Vercel.",
             "manager_alert": True
         }), 503
-
-    # ... (Остальная логика chat) ...
 
     try:
         data = request.get_json()
@@ -57,6 +61,7 @@ def ai_chat():
         if not user_message:
             return jsonify({"response": "Пожалуйста, отправьте текстовое сообщение.", "manager_alert": False}), 400
 
+        # --- 1. Форматирование истории чата для Gemini ---
         history = []
         for item in history_data:
             if 'role' in item and item.get('parts') and item['parts'][0].get('text'):
@@ -65,6 +70,7 @@ def ai_chat():
                     parts=[Part.from_text(item['parts'][0]['text'])]
                 ))
         
+        # --- 2. Системная инструкция (Промпт) ---
         system_instruction = (
             "Ты — ведущий технолог-полиграфист и автоматизированная система консультаций студии nuvera. "
             "Твой тон: деловой, профессиональный. "
@@ -72,6 +78,7 @@ def ai_chat():
             "ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА: Отвечай вежливо, кратко и только по существу, связанному с печатью."
         )
 
+        # --- 3. Создание чата (для сохранения контекста) ---
         chat = client.chats.create(
             model=MODEL_NAME,
             history=history,
@@ -80,6 +87,7 @@ def ai_chat():
             )
         )
 
+        # --- 4. Отправка нового сообщения ---
         ai_response_result = chat.send_message(user_message)
         ai_response = ai_response_result.text
 
