@@ -1,5 +1,4 @@
-# requirements.txt
 Flask
-google-genai
 flask-cors
-python-dotenv
+google-genai
+aiogram
