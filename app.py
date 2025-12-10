@@ -1,4 +1,4 @@
-# app.py (Финальная рабочая версия с явным чтением CLIENT_KEY__ и CORS)
+# app.py (Финальная стандартная версия для Vercel с CORS)
 
 import os
 from flask import Flask, request, jsonify
@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO)
 # --- Настройка Flask ---
 app = Flask(__name__)
 
-# !!! FIX CORS: Используем простую инициализацию для надежной обработки OPTIONS
+# !!! FIX CORS: Простая инициализация для надежной обработки OPTIONS
 CORS(app) 
 
 # --- Настройки Gemini ---
@@ -23,18 +23,11 @@ MODEL_NAME = "gemini-2.5-flash"
 # --- Инициализация Gemini API ---
 client = None
 try:
-    # 1. Читаем ваш ключ из переменной CLIENT_KEY__
-    my_api_key = os.environ.get("CLIENT_KEY__") 
-    
-    # 2. Если ключ найден, передаем его явно при инициализации
-    if my_api_key:
-        client = genai.Client(api_key=my_api_key)
-        logging.info("Gemini client initialized successfully using CLIENT_KEY__.")
-    else:
-        # 3. Если ключ не найден, вызываем ошибку для логов
-        raise ValueError("Environment variable CLIENT_KEY__ not found or is empty.")
-
+    # КРИТИЧЕСКИ ВАЖНО: Клиент автоматически ищет ключ в переменной GEMINI_API_KEY
+    client = genai.Client()
+    logging.info("Gemini client initialized successfully.")
 except Exception as e:
+    # Если ключ не найден, функция не падает, а мы логируем ошибку
     logging.error(f"!!! CRITICAL ERROR: Gemini client failed to initialize: {e}")
 
 # --- Маршрут для ПРОВЕРКИ СТАТУСА ---
@@ -46,7 +39,8 @@ def home():
     if client:
         return "Nuvera AI API is running and Gemini client is ready!", 200
     else:
-        return "Nuvera AI API is running, but Gemini client failed to initialize (Key Error?).", 503
+        # Статус 503 означает ошибку сервиса (например, нерабочий ключ API)
+        return "Nuvera AI API is running, but Gemini client failed to initialize (Check GEMINI_API_KEY on Vercel).", 503
 
 # --- Маршрут для ТЕКСТОВОГО ЧАТА ---
 @app.route('/api/ai_chat', methods=['POST'])
