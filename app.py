@@ -1,4 +1,4 @@
-# app.py (Финальная рабочая версия для Vercel с усиленным CORS)
+# app.py (Финальная рабочая версия для Vercel с исправленным CORS)
 
 import os
 from flask import Flask, request, jsonify
@@ -14,8 +14,8 @@ logging.basicConfig(level=logging.INFO)
 # --- Настройка Flask ---
 app = Flask(__name__)
 
-# !!! УСИЛЕННЫЙ CORS: Разрешаем запросы POST/GET только с конкретного пути /api/*
-# "origins": "*" разрешает запросы с ЛЮБОГО домена (чтобы избежать проблем Tilda)
+# !!! УСИЛЕННЫЙ CORS: Разрешаем запросы POST/GET/OPTIONS с любого домена
+# Это критически важно для работы между Tilda и Vercel.
 CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
 
 # --- Настройки Gemini ---
