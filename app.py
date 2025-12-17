@@ -5,36 +5,41 @@ from google import genai
 from data_config import get_price_json_string
 
 app = Flask(__name__)
-CORS(app)
+# Разрешаем CORS только для вашего домена для безопасности
+CORS(app, resources={r"/api/*": {"origins": "https://nuvera-print.by"}})
 
+# Инициализация клиента
 try:
     API_KEY = os.environ.get("GEMINI_API_KEY")
     client = genai.Client(api_key=API_KEY)
 except Exception as e:
-    print(f"Critial Init Error: {e}")
+    print(f"Startup Error: {e}")
 
 @app.route('/api/ai_chat', methods=['POST'])
 def ai_chat_endpoint():
     try:
         data = request.get_json()
-        user_message = data.get('message', '')
-        history = data.get('history', [])
+        if not data or 'message' not in data:
+            return jsonify({"response": "Пустой запрос"}), 400
 
-        # Формируем компактный контекст
-        prompt = f"Ты технолог Nuvera. Прайс: {get_price_json_string()}. Отвечай кратко. Вопрос: {user_message}"
-
-        # Используем 1.5-flash (она быстрее и стабильнее для Vercel)
+        user_msg = data.get('message')
+        
+        # Максимально простой промпт для Gemini 1.5 Flash
+        context = f"Ты технолог Nuvera. Прайс: {get_price_json_string()}. Отвечай кратко."
+        
         response = client.models.generate_content(
             model='gemini-1.5-flash',
-            contents=prompt
+            contents=f"{context}\nВопрос пользователя: {user_msg}"
         )
 
         return jsonify({"response": response.text, "status": "ok"})
 
     except Exception as e:
-        # Вместо 500 ошибки возвращаем 200 с текстом ошибки, чтобы сайт не «ломался»
-        return jsonify({"response": "Сервер перегружен. Попробуйте через 30 секунд.", "error": str(e)}), 200
+        # Логируем ошибку в консоль Vercel
+        print(f"Runtime Error: {str(e)}")
+        # Возвращаем 200 статус, чтобы браузер не выдавал 500 ошибку
+        return jsonify({"response": "Сервер временно отдыхает. Попробуйте через минуту."}), 200
 
-@app.route('/')
+@app.route('/', methods=['GET'])
 def index():
-    return "API Nuvera is running"
+    return "API Nuvera Active", 200
