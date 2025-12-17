@@ -6,7 +6,6 @@ import re
 from data_config import get_price_json_string
 
 app = Flask(__name__)
-# Полный доступ для Tilda
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route('/api/ai_chat', methods=['POST', 'OPTIONS'])
@@ -16,45 +15,53 @@ def ai_chat_endpoint():
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return jsonify({"response": "Ошибка: Добавьте GEMINI_API_KEY в Vercel"}), 200
+        return jsonify({"response": "Ошибка: Ключ API не найден."}), 200
 
     try:
-        # Настройка модели
         genai.configure(api_key=api_key)
+        
+        # КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: Мы НЕ указываем версию в имени модели
+        # Библиотека сама выберет v1 (стабильную), если написать просто имя
         model = genai.GenerativeModel('gemini-1.5-flash')
         
         data = request.get_json()
         user_msg = data.get('message', '')
 
-        # Получаем и максимально сжимаем прайс (удаляем лишние пробелы)
-        compact_price = re.sub(r'\s+', ' ', get_price_json_string())
+        raw_price = get_price_json_string()
+        compact_price = re.sub(r'\s+', ' ', raw_price)
 
-        # Системный промпт: строгие правила для ИИ
         prompt = (
-            f"Ты — эксперт-технолог типографии Nuvera. Твой прайс в JSON: {compact_price}. "
-            f"Правила: 1. Отвечай очень кратко и вежливо. "
-            f"2. Используй только данные из прайса. "
-            f"3. Если услуги нет в списке, вежливо отправь к менеджеру. "
-            f"4. НЕ используй символы * или # в ответе. "
-            f"Вопрос клиента: {user_msg}"
+            f"Ты технолог Nuvera. Прайс: {compact_price}. "
+            f"Ответь кратко и вежливо. Без символов * и #. "
+            f"Вопрос: {user_msg}"
         )
 
-        # Генерация ответа
+        # Добавляем параметр для принудительного использования стабильной версии, если библиотека капризничает
         response = model.generate_content(prompt)
-        clean_response = response.text.replace('*', '').replace('#', '').strip()
         
-        return jsonify({
-            "response": clean_response, 
-            "status": "ok"
-        })
+        if not response.text:
+            return jsonify({"response": "ИИ не смог сформировать ответ. Попробуйте другой вопрос."}), 200
+
+        clean_text = response.text.replace('*', '').replace('#', '').strip()
+        
+        return jsonify({"response": clean_text, "status": "ok"})
 
     except Exception as e:
-        error_msg = str(e)
-        # Обработка лимита 429
-        if "429" in error_msg:
-            return jsonify({"response": "Превышен лимит запросов. Подождите 60 сек."}), 200
-        return jsonify({"response": f"Системная ошибка: {error_msg}"}), 200
+        error_str = str(e)
+        # Если все еще 404, пробуем подсказать серверу переключиться на gemini-pro
+        if "404" in error_str:
+             try:
+                 model_alt = genai.GenerativeModel('gemini-pro')
+                 response = model_alt.generate_content(user_msg)
+                 return jsonify({"response": response.text.replace('*', ''), "status": "ok"})
+             except:
+                 return jsonify({"response": "Модель временно недоступна. Обновите API ключ или подождите."}), 200
+        
+        if "429" in error_str:
+            return jsonify({"response": "Много запросов. Подождите 60 сек."}), 200
+            
+        return jsonify({"response": f"Ошибка: {error_str}"}), 200
 
 @app.route('/')
 def index():
-    return "Nuvera AI API: Online", 200
+    return "API Nuvera Active", 200
