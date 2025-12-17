@@ -5,33 +5,36 @@ import google.generativeai as genai
 from data_config import get_price_json_string
 
 app = Flask(__name__)
-# Разрешаем CORS для всех доменов и методов
+# Разрешаем CORS для всех, чтобы браузер не блокировал запросы
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route('/api/ai_chat', methods=['POST', 'OPTIONS'])
 def ai_chat_endpoint():
-    # Исправляем CORS preflight (ошибка на твоих скриншотах)
+    # Исправляем CORS preflight (убирает ошибки со скриншотов)
     if request.method == 'OPTIONS':
         return '', 200
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return jsonify({"response": "Ошибка: Ключ API не найден в Vercel."}), 200
+        return jsonify({"response": "Ошибка: Ключ API не настроен в Vercel."}), 200
 
     try:
+        # Настраиваем доступ
         genai.configure(api_key=api_key)
         
-        # Убираем префиксы, оставляем только чистое имя модели
+        # Используем максимально простое имя модели
         model = genai.GenerativeModel('gemini-1.5-flash')
         
         data = request.get_json()
         user_msg = data.get('message', '')
 
+        # Формируем промпт
         prompt = (
             f"Ты технолог типографии Nuvera. Твой прайс: {get_price_json_string()}\n"
             f"Отвечай кратко и вежливо. Вопрос клиента: {user_msg}"
         )
 
+        # Генерируем ответ
         response = model.generate_content(prompt)
         
         return jsonify({
@@ -40,7 +43,7 @@ def ai_chat_endpoint():
         })
 
     except Exception as e:
-        # Если будет ошибка 404 или 429, мы увидим точное описание
+        # Если ошибка повторится, мы увидим её точный текст в чате
         return jsonify({"response": f"Ошибка Gemini: {str(e)}"}), 200
 
 @app.route('/')
