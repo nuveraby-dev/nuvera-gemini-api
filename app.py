@@ -31,3 +31,4 @@ def ai_chat_endpoint():
 @app.route('/')
 def index():
     return "API Nuvera Active"
+
