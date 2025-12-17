@@ -6,13 +6,13 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Твои данные
+# Твой токен и ID
 TOKEN = "8514796589:AAEJqdm3DsCtki-gneHQTLEEIUZKqyiz_tg"
-CHAT_ID = "1055949397"
+ADMIN = "1055949397"
 storage = {}
 
 @app.route('/api/ai_chat', methods=['POST', 'OPTIONS'])
-def handle_chat():
+def chat():
     if request.method == 'OPTIONS':
         res = make_response("", 200)
         res.headers["Access-Control-Allow-Origin"] = "*"
@@ -25,13 +25,13 @@ def handle_chat():
         msg = data.get('message', '')
         uid = data.get('user_id', 'anon')
         
-        text = f"📩 <b>Новое сообщение!</b>\nID: <code>[{uid}]</code>\n\n{msg}"
+        # Отправка в TG
         requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
-                      json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=5)
+                      json={"chat_id": ADMIN, "text": f"ID: [{uid}]\n{msg}"})
         
-        r = jsonify({"status": "ok"})
-        r.headers["Access-Control-Allow-Origin"] = "*"
-        return r
+        response = jsonify({"status": "ok"})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        return response
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -39,8 +39,7 @@ def handle_chat():
 def get_answer():
     uid = request.args.get('user_id')
     ans = storage.get(uid)
-    if ans:
-        del storage[uid]
+    if ans: del storage[uid]
     res = jsonify({"answer": ans})
     res.headers["Access-Control-Allow-Origin"] = "*"
     return res
@@ -52,8 +51,7 @@ def webhook():
         txt = data["message"].get("text")
         orig = data["message"]["reply_to_message"].get("text", "")
         match = re.search(r"\[(\w+)\]", orig)
-        if match and txt:
-            storage[match.group(1)] = txt
+        if match and txt: storage[match.group(1)] = txt
     return jsonify({"status": "ok"})
 
 @app.route('/')
