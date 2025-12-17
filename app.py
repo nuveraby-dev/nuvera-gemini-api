@@ -8,7 +8,7 @@ from data_config import get_price_json_string
 app = Flask(__name__)
 CORS(app)
 
-# Инициализация клиента Gemini через переменную окружения
+# Инициализация клиента
 API_KEY = os.environ.get("GEMINI_API_KEY")
 client = genai.Client(api_key=API_KEY)
 
@@ -27,27 +27,21 @@ def ai_chat_endpoint():
         user_message = data.get('message')
         history = data.get('history', [])
 
-        # ИСПРАВЛЕНИЕ: Part.from_text() принимает ТОЛЬКО ОДИН аргумент (текст)
-        # Мы явно указываем именованный аргумент 'text' для надежности
+        # ИСПРАВЛЕНИЕ: Передаем только текст сообщения (1 аргумент)
         user_part = Part.from_text(text=user_message)
         
         system_part = Part.from_text(text=f"{SYSTEM_PROMPT}\n\nПРАЙС-ЛИСТ:\n{get_price_json_string()}")
 
-        # Собираем контент для модели
-        # Первым сообщением всегда идет системный контекст от имени user
+        # Собираем контент (Системный контекст + История + Новое сообщение)
         contents = [
             {"role": "user", "parts": [system_part]}
         ]
-        
-        # Добавляем историю (убедитесь, что она в формате [{'role':..., 'parts':...}])
         contents.extend(history)
-        
-        # Добавляем текущее сообщение пользователя
         contents.append({"role": "user", "parts": [user_part]})
 
-        # Вызов модели
+        # Вызов АКТУАЛЬНОЙ модели 2.0 Flash
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-2.0-flash', 
             contents=contents
         )
 
@@ -58,15 +52,15 @@ def ai_chat_endpoint():
 
     except Exception as e:
         print(f"Ошибка в ai_chat: {str(e)}")
+        # Возвращаем понятную ошибку пользователю
         return jsonify({
             "response": f"Произошла ошибка: {str(e)}",
             "manager_alert": True
         }), 500
 
-# Корневой маршрут, чтобы не было ошибки 404 при простом открытии ссылки
 @app.route('/', methods=['GET'])
 def index():
-    return jsonify({"message": "Nuvera Gemini API is running"}), 200
+    return jsonify({"message": "Nuvera Gemini API is running", "model": "gemini-2.0-flash"}), 200
 
 if __name__ == '__main__':
     app.run(debug=True)
