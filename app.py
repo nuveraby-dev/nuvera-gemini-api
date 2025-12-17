@@ -6,10 +6,10 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Твои данные
+# Ваши актуальные данные
 TOKEN = "8514796589:AAEJqdm3DsCtki-gneHQTLEEIUZKqyiz_tg"
-ADMIN_ID = "1055949397"
-# Память для хранения ответов (очищается при перезагрузке сервера)
+CHAT_ID = "1055949397"
+# Локальное хранилище для ответов менеджера
 storage = {}
 
 @app.route('/api/ai_chat', methods=['POST', 'OPTIONS'])
@@ -26,9 +26,10 @@ def chat():
         msg = data.get('message', '')
         uid = data.get('user_id', 'anon')
         
-        # Отправляем сообщение тебе в Telegram
+        # Пересылка сообщения в ваш Telegram
+        text = f"📩 <b>Новое сообщение!</b>\nID: <code>[{uid}]</code>\n\n{msg}"
         requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", 
-                      json={"chat_id": ADMIN_ID, "text": f"ID: [{uid}]\n{msg}"})
+                      json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}, timeout=5)
         
         r = jsonify({"status": "ok"})
         r.headers["Access-Control-Allow-Origin"] = "*"
@@ -49,11 +50,10 @@ def get_answer():
 @app.route('/api/tg_webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
-    # Проверяем, является ли сообщение ответом (Reply)
     if data and "message" in data and "reply_to_message" in data["message"]:
         txt = data["message"].get("text")
         orig = data["message"]["reply_to_message"].get("text", "")
-        # Ищем ID в формате [u12345]
+        # Извлекаем ID пользователя из квадратных скобок сообщения, на которое вы ответили
         match = re.search(r"\[(\w+)\]", orig)
         if match and txt:
             storage[match.group(1)] = txt
@@ -61,4 +61,4 @@ def webhook():
 
 @app.route('/')
 def home():
-    return "Bridge is alive", 200
+    return "Bridge is active and AI-free", 200
