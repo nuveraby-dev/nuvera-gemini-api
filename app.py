@@ -14,13 +14,24 @@ def ai_chat_endpoint():
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return jsonify({"response": "Ошибка: API-ключ не найден в настройках Vercel."}), 200
+        return jsonify({"response": "Ошибка: API-ключ не найден в Vercel."}), 200
 
     try:
         genai.configure(api_key=api_key)
         
-        # Пробуем версию -latest, она часто подхватывается там, где обычная выдает 404
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        # Автоматический подбор рабочей модели
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Приоритет выбора: сначала flash, если нет - любая доступная
+        model_name = 'models/gemini-1.5-flash' # пробуем стандарт
+        if model_name not in available_models:
+            # Если стандарта нет в списке, берем первую рабочую модель из списка Google
+            model_name = available_models[0] if available_models else None
+
+        if not model_name:
+            return jsonify({"response": "У вашего ключа нет доступных моделей ИИ."}), 200
+
+        model = genai.GenerativeModel(model_name)
         
         data = request.get_json()
         user_msg = data.get('message', '')
@@ -31,19 +42,15 @@ def ai_chat_endpoint():
         )
 
         response = model.generate_content(prompt)
-        return jsonify({"response": response.text, "status": "ok"})
+        return jsonify({
+            "response": response.text, 
+            "status": "ok",
+            "used_model": model_name # для диагностики
+        })
 
     except Exception as e:
-        # Если снова 404, этот блок выведет список моделей, которые ВАМ доступны
-        try:
-            available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            return jsonify({
-                "response": f"Ошибка: {str(e)}",
-                "available_models": available_models[:5] # Покажем первые 5 доступных
-            }), 200
-        except:
-            return jsonify({"response": f"Критическая ошибка: {str(e)}"}), 200
+        return jsonify({"response": f"Критическая ошибка: {str(e)}"}), 200
 
 @app.route('/')
 def index():
-    return "API Nuvera Ready"
+    return "API Nuvera Ready (Smart Select Mode)"
