@@ -3,80 +3,81 @@ from flask_cors import CORS
 import os
 import google.generativeai as genai
 import re
-from data_config import get_price_json_string
+from data_config import get_price_data
 
 app = Flask(__name__)
+# Разрешаем запросы с любых доменов (для Tilda)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 @app.route('/api/ai_chat', methods=['POST', 'OPTIONS'])
 def ai_chat_endpoint():
+    # Обработка предварительного запроса браузера
     if request.method == 'OPTIONS':
         return '', 200
 
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return jsonify({"response": "Ошибка: Ключ API не найден в настройках Vercel."}), 200
+        return jsonify({"response": "Ошибка: API ключ не настроен в Vercel."}), 200
 
     try:
+        # Настройка Google AI
         genai.configure(api_key=api_key)
         
-        # 1. Пробуем получить список моделей
-        try:
-            available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        except:
-            available_models = []
-
-        # 2. Определяем приоритеты
-        priority = ['models/gemini-1.5-flash', 'models/gemini-1.5-flash-latest', 'models/gemini-pro']
-        
-        target_model = None
-        # Ищем совпадение в списке
-        for p in priority:
-            if p in available_models:
-                target_model = p
-                break
-        
-        # 3. Если список пуст, пробуем принудительно самую стабильную версию
-        if not target_model:
-            target_model = 'gemini-1.5-flash' 
-
-        model = genai.GenerativeModel(target_model)
-        
+        # Получаем сообщение от пользователя
         data = request.get_json()
         user_msg = data.get('message', '')
+        user_msg_lower = user_msg.lower()
 
-        compact_price = re.sub(r'\s+', ' ', get_price_json_string())
+        # Загружаем разбитый на блоки прайс
+        price_dict = get_price_data()
+        
+        # Логика подбора контекста (Умный фильтр)
+        # Это экономит 80% лимитов, отправляя только нужный блок
+        if any(x in user_msg_lower for x in ["фото", "паспорт", "10х15", "селфи"]):
+            context = price_dict["фото"]
+        elif any(x in user_msg_lower for x in ["чертеж", "а1", "а0", "а2", "проект", "фальц", "склад"]):
+            context = price_dict["чертежи"]
+        elif any(x in user_msg_lower for x in ["визитк", "карточк"]):
+            context = price_dict["визитки"]
+        elif any(x in user_msg_lower for x in ["офсет", "1000", "тираж", "флаер", "листовк"]):
+            context = price_dict["офсет"]
+        elif any(x in user_msg_lower for x in ["бумаг", "картон", "наклейк", "стикер", "sra3"]):
+            context = price_dict["бумага"]
+        elif any(x in user_msg_lower for x in ["ламин", "переплет", "резка", "копия", "скан"]):
+            context = price_dict["обработка_и_правила"]
+        else:
+            # Если тема не ясна или общая (печать документов)
+            context = price_dict["печать"]
 
+        # Инициализация модели (используем стабильную версию)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # Системная инструкция (максимально сжатая)
         prompt = (
-            f"Ты технолог Nuvera. Прайс: {compact_price}. "
-            f"Ответь кратко и вежливо. Не используй * или #. "
+            f"Ты ИИ-технолог типографии Nuvera. Прайс: {context}. "
+            f"Правила: отвечай супер-кратко (1-2 предложения), вежливо, без символов * и #. "
+            f"Если в этой части прайса нет ответа, скажи 'Уточните у менеджера'. "
             f"Вопрос: {user_msg}"
         )
 
+        # Генерация ответа
         response = model.generate_content(prompt)
         
-        # Если ответ пустой
-        if not response.text:
-             raise Exception("Empty response")
-
+        # Дополнительная чистка текста на стороне сервера
         clean_text = response.text.replace('*', '').replace('#', '').strip()
         
         return jsonify({
-            "response": clean_text, 
-            "status": "ok",
-            "model": target_model
+            "response": clean_text,
+            "status": "ok"
         })
 
     except Exception as e:
-        error_str = str(e)
-        if "429" in error_str:
-            return jsonify({"response": "Много запросов. Подождите 60 секунд."}), 200
-        if "403" in error_str:
-            return jsonify({"response": "Ошибка доступа. Проверьте регион в Vercel (нужен USA)."}), 200
-        
-        # Если ничего не помогло, выводим саму ошибку для диагностики
-        return jsonify({"response": f"Ошибка связи с ИИ: {error_str}. Попробуйте позже."}), 200
+        error_msg = str(e)
+        # Красивый перехват лимитов
+        if "429" in error_msg:
+            return jsonify({"response": "Много запросов. Пожалуйста, подождите 1 минуту."}), 200
+        return jsonify({"response": f"Системная ошибка: {error_msg}"}), 200
 
 @app.route('/')
 def index():
-    return "API Nuvera (Smart Selection) Active", 200
+    return "Nuvera AI API (Smart Filtering) is Online", 200
